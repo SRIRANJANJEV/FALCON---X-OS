@@ -1,0 +1,174 @@
+# FALCON-X Detection Engine Configuration
+
+engine:
+  name: "falconx-engine"
+  version: "0.1.0"
+  mode: "local-first"
+  log_level: "info"
+
+capture:
+  interface: "auto"
+  bpf_filter: ""
+  snap_length: 96
+  max_packets_per_second: 1000
+  buffer_size: 10000
+  batch_size: 100
+  flush_interval_ms: 100
+  use_npcap: false
+
+features:
+  flow_timeout_seconds: 120
+  aggregation_window_seconds: 10
+  max_flows: 50000
+  enabled_features:
+    - flow_duration
+    - packet_count
+    - byte_count
+    - packets_per_second
+    - bytes_per_second
+    - unique_destinations
+    - unique_ports
+    - unique_source_ports
+    - tcp_syn_rate
+    - tcp_rst_rate
+    - tcp_fin_rate
+    - icmp_rate
+    - dns_request_rate
+    - arp_activity
+    - protocol_distribution
+    - avg_packet_size
+    - max_packet_size
+    - min_packet_size
+    - payload_entropy
+    - inter_arrival_time_mean
+    - inter_arrival_time_std
+
+baseline:
+  learning_period_hours: 24
+  update_interval_seconds: 300
+  min_samples: 100
+  max_devices: 1000
+  confidence_threshold: 0.7
+  decay_factor: 0.95
+  storage_path: "/var/lib/falconx/baseline"
+  device_ttl_hours: 168
+
+detection:
+  enabled_detectors:
+    - rule_based
+    - statistical
+    - ml_interface
+  sensitivity: "medium"
+  min_confidence: 0.5
+  deduplication_window_seconds: 300
+  max_incidents_per_minute: 10
+
+  rules:
+    port_scan:
+      enabled: true
+      threshold_unique_ports: 15
+      threshold_time_seconds: 60
+      severity: "HIGH"
+
+    syn_flood:
+      enabled: true
+      threshold_pps: 100
+      threshold_syn_ratio: 0.8
+      severity: "CRITICAL"
+
+    abnormal_connection_rate:
+      enabled: true
+      threshold_multiplier: 3.0
+      severity: "MEDIUM"
+
+    dns_anomaly:
+      enabled: true
+      threshold_queries_per_minute: 60
+      threshold_unique_domains: 50
+      severity: "MEDIUM"
+
+    arp_anomaly:
+      enabled: true
+      threshold_arp_per_second: 10
+      severity: "HIGH"
+
+    unknown_device:
+      enabled: true
+      min_observation_hours: 1
+      severity: "LOW"
+
+    brute_force:
+      enabled: true
+      threshold_attempts: 10
+      threshold_time_seconds: 60
+      severity: "HIGH"
+
+    data_exfiltration:
+      enabled: true
+      threshold_outbound_mb: 100
+      threshold_time_seconds: 300
+      severity: "CRITICAL"
+
+    icmp_flood:
+      enabled: true
+      threshold_pps: 50
+      severity: "HIGH"
+
+    unusual_protocol:
+      enabled: true
+      severity: "MEDIUM"
+
+  statistical:
+    z_score_threshold: 3.0
+    window_size: 100
+    min_history: 50
+
+  ml:
+    model_path: "/opt/falconx/models"
+    inference_interval_seconds: 30
+    confidence_threshold: 0.8
+    max_features: 20
+
+risk:
+  scoring:
+    low_max: 29
+    medium_max: 59
+    high_max: 79
+    critical_min: 80
+  weights:
+    anomaly_score: 0.3
+    event_severity: 0.25
+    device_reputation: 0.2
+    frequency: 0.15
+    confidence: 0.1
+  decay_factor: 0.9
+  max_history: 1000
+
+incidents:
+  storage_path: "/var/lib/falconx/incidents"
+  max_open: 100
+  auto_close_hours: 72
+  retention_days: 90
+  alert_on_critical: true
+  alert_on_high: true
+
+enforcement:
+  enabled: false
+  mode: "log-only"
+  actions:
+    - log
+    - alert
+  blocked_ports: []
+  blocked_ips: []
+  max_blocked: 100
+  auto_unblock_minutes: 30
+
+health:
+  endpoint_port: 9100
+  status_file: "/var/lib/falconx/engine.status"
+
+performance:
+  max_cpu_percent: 80
+  max_memory_mb: 512
+  gc_interval_seconds: 60
+  stats_interval_seconds: 30

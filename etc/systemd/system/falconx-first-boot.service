@@ -1,0 +1,30 @@
+[Unit]
+Description=FALCON-X First Boot Setup
+After=network-online.target
+Wants=network-online.target
+Before=falconx-engine.service falconx-web.service falconx-health.service falconx-enforcer.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/falconx/scripts/first-boot.sh
+RemainAfterExit=yes
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=falconx-first-boot
+
+# First boot needs root for user creation, firewall, AppArmor, sysctl
+User=root
+Group=root
+
+# Minimal sandboxing — this IS the setup component
+ProtectHome=true
+ProtectSystem=full
+PrivateTmp=true
+
+# Resource limits
+LimitNOFILE=256
+TasksMax=16
+MemoryMax=128M
+
+[Install]
+WantedBy=multi-user.target

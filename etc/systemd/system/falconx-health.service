@@ -1,0 +1,53 @@
+[Unit]
+Description=FALCON-X Health Check — System Health Monitoring
+After=network-online.target falconx-engine.service
+Wants=falconx-engine.service
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/bin/python3 /opt/falconx/scripts/healthcheck.py --json
+Restart=always
+RestartSec=30
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=falconx-health
+
+RuntimeDirectory=falconx
+RuntimeDirectoryMode=0755
+
+# ── Filesystem sandboxing ─────────────────────────────────────────
+PrivateTmp=true
+ProtectHome=true
+ReadWritePaths=/var/lib/falconx /var/log/falconx /run/falconx
+ReadOnlyPaths=/etc/falconx /opt/falconx
+
+# ── Privilege restrictions ────────────────────────────────────────
+# EXCEPTION: Needs nftables access for firewall checks
+NoNewPrivileges=false
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+# ── Capability restrictions ───────────────────────────────────────
+# CAP_NET_ADMIN required for nft list commands
+CapabilityBoundingSet=CAP_NET_ADMIN
+AmbientCapabilities=CAP_NET_ADMIN
+
+# ── System call filtering ─────────────────────────────────────────
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources @obsolete
+
+# ── Network restrictions ──────────────────────────────────────────
+RestrictAddressFamilies=AF_INET AF_UNIX AF_NETLINK
+
+# ── Resource limits ───────────────────────────────────────────────
+LimitNOFILE=1024
+TasksMax=32
+MemoryMax=64M
+CPUQuota=10%
+
+[Install]
+WantedBy=multi-user.target

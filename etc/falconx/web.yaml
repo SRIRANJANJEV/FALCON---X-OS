@@ -1,0 +1,48 @@
+# FALCON-X Web Dashboard Configuration
+
+web:
+  enabled: true
+  listen_address: "0.0.0.0"
+  listen_port: 8443
+  tls_enabled: true
+  cert_path: "/etc/falconx/secrets/server.crt"
+  key_path: "/etc/falconx/secrets/server.key"
+
+  auth:
+    session_timeout_minutes: 30
+    max_sessions: 50
+    max_login_attempts: 5
+    lockout_minutes: 15
+    password_hash_algorithm: "pbkdf2_sha256"
+    password_iterations: 100000
+
+  rate_limiting:
+    api_requests_per_minute: 100
+    login_attempts_per_minute: 20
+    config_changes_per_minute: 50
+
+  security:
+    csrf_protection: true
+    secure_cookies: true
+    httponly_cookies: true
+    same_site: "Strict"
+    frame_options: "DENY"
+    content_type_options: "nosniff"
+
+  dashboard:
+    refresh_interval_seconds: 15
+    max_incidents_display: 100
+    max_devices_display: 500
+    timezone: "UTC"
+
+  ai:
+    enabled: false
+    omniroute_url: "http://127.0.0.1:11434"
+    omniroute_model: "llama3.2"
+    timeout_seconds: 30
+    max_tokens: 512
+
+  management:
+    allowed_interfaces: []
+    require_tls: true
+    admin_only_config: true

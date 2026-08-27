@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FALCON-X Dashboard</title>
+<style>
+:root{--bg:#0a0e17;--card:#111827;--border:#1f2937;--text:#e0e6ed;--dim:#6b7280;--accent:#00d4ff;--green:#10b981;--yellow:#f59e0b;--red:#ef4444;--purple:#8b5cf6}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:12px 24px;background:var(--card);border-bottom:1px solid var(--border)}
+.topbar h1{font-size:18px;color:var(--accent);letter-spacing:3px}
+.topbar-right{display:flex;align-items:center;gap:16px}
+.topbar-right .status{font-size:13px;padding:4px 12px;border-radius:20px;font-weight:600}
+.status-protected{background:#064e3b;color:#10b981}
+.status-degraded{background:#78350f;color:#f59e0b}
+.status-unprotected{background:#7f1d1d;color:#ef4444}
+.topbar-right .btn-logout{background:none;border:1px solid var(--border);color:var(--dim);padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px}
+.topbar-right .btn-logout:hover{border-color:var(--red);color:var(--red)}
+.nav{display:flex;gap:4px;padding:8px 24px;background:var(--card);border-bottom:1px solid var(--border)}
+.nav button{background:none;border:none;color:var(--dim);padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px;transition:all 0.2s}
+.nav button:hover{color:var(--text);background:#1f2937}
+.nav button.active{color:var(--accent);background:#0c1929}
+.content{padding:24px;max-width:1400px;margin:0 auto}
+.grid{display:grid;gap:16px}
+.grid-4{grid-template-columns:repeat(4,1fr)}
+.grid-3{grid-template-columns:repeat(3,1fr)}
+.grid-2{grid-template-columns:repeat(2,1fr)}
+@media(max-width:900px){.grid-4,.grid-3{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:600px){.grid-4,.grid-3,.grid-2{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px}
+.card h3{font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--dim);margin-bottom:12px}
+.card .value{font-size:28px;font-weight:700}
+.card .sub{font-size:12px;color:var(--dim);margin-top:4px}
+.section{margin-top:24px}
+.section-title{font-size:14px;font-weight:600;margin-bottom:12px;color:var(--text)}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--dim);padding:10px 12px;border-bottom:1px solid var(--border)}
+td{padding:10px 12px;border-bottom:1px solid #111;font-size:13px}
+tr:hover{background:#0f1520}
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+.badge-low{background:#064e3b;color:#10b981}
+.badge-medium{background:#78350f;color:#f59e0b}
+.badge-high{background:#7f1d1d;color:#ef4444}
+.badge-critical{background:#dc2626;color:#fff}
+.badge-open{background:#1e3a5f;color:#60a5fa}
+.badge-resolved{background:#064e3b;color:#10b981}
+.badge-investigating{background:#78350f;color:#f59e0b}
+.page{display:none}
+.page.active{display:block}
+.health-row{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)}
+.health-dot{width:8px;height:8px;border-radius:50%}
+.health-healthy{background:var(--green)}
+.health-degraded{background:var(--yellow)}
+.health-failed{background:var(--red)}
+.config-group{margin-bottom:20px}
+.config-group label{display:block;font-size:12px;color:var(--dim);margin-bottom:6px;text-transform:uppercase;letter-spacing:1px}
+.config-group input,.config-group select{width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;outline:none}
+.config-group input:focus,.config-group select:focus{border-color:var(--accent)}
+.btn-primary{background:var(--accent);color:var(--bg);border:none;padding:10px 20px;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px}
+.btn-primary:hover{opacity:0.9}
+.ai-status{display:flex;align-items:center;gap:8px;font-size:12px}
+.ai-dot{width:6px;height:6px;border-radius:50%}
+.empty{text-align:center;padding:40px;color:var(--dim)}
+.bar{height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-top:6px}
+.bar-fill{height:100%;border-radius:3px;transition:width 0.5s}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>FALCON-X</h1>
+  <div class="topbar-right">
+    <span id="mlStatus" style="font-size:12px;color:#6b7280;margin-right:8px">ML: Checking...</span>
+    <div class="ai-status" id="aiStatus">
+      <span class="ai-dot" id="aiDot"></span>
+      <span id="aiText">AI: Checking...</span>
+    </div>
+    <span class="status" id="overallStatus">CHECKING</span>
+    <button class="btn-logout" onclick="logout()">Sign Out</button>
+  </div>
+</div>
+
+<div class="nav">
+  <button class="active" onclick="showPage('overview',this)">Overview</button>
+  <button onclick="showPage('devices',this)">Devices</button>
+  <button onclick="showPage('traffic',this)">Traffic</button>
+  <button onclick="showPage('incidents',this)">Incidents</button>
+  <button onclick="showPage('health',this)">Health</button>
+  <button onclick="showPage('config',this)">Config</button>
+</div>
+
+<div class="content">
+
+<!-- OVERVIEW -->
+<div class="page active" id="page-overview">
+  <div class="grid grid-4" id="overviewCards"></div>
+  <div class="grid grid-2 section">
+    <div class="card">
+      <h3>System Resources</h3>
+      <div id="systemResources"></div>
+    </div>
+    <div class="card">
+      <h3>Recent Incidents</h3>
+      <div id="recentIncidents"></div>
+    </div>
+  </div>
+</div>
+
+<!-- DEVICES -->
+<div class="page" id="page-devices">
+  <div class="card">
+    <h3>Network Devices</h3>
+    <table>
+      <thead><tr><th>IP</th><th>Status</th><th>Flows</th><th>Risk</th><th>First Seen</th><th>Last Seen</th></tr></thead>
+      <tbody id="devicesTable"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- TRAFFIC -->
+<div class="page" id="page-traffic">
+  <div class="grid grid-4" id="trafficCards"></div>
+  <div class="card section">
+    <h3>Traffic Statistics</h3>
+    <div id="trafficStats"></div>
+  </div>
+</div>
+
+<!-- INCIDENTS -->
+<div class="page" id="page-incidents">
+  <div class="card">
+    <h3>Security Incidents</h3>
+    <table>
+      <thead><tr><th>ID</th><th>Device</th><th>Time</th><th>Type</th><th>Severity</th><th>Risk</th><th>Confidence</th><th>Evidence</th><th>Status</th><th>AI</th></tr></thead>
+      <tbody id="incidentsTable"></tbody>
+    </table>
+    <div class="empty" id="noIncidents" style="display:none">No active incidents</div>
+  </div>
+</div>
+
+<!-- HEALTH -->
+<div class="page" id="page-health">
+  <div class="card">
+    <h3>System Health</h3>
+    <div id="healthList"></div>
+  </div>
+</div>
+
+<!-- CONFIG -->
+<div class="page" id="page-config">
+  <div class="card">
+    <h3>Configuration</h3>
+    <div id="configForm">
+      <div class="config-group">
+        <label>Detection Sensitivity</label>
+        <select id="cfgSensitivity">
+          <option value="low">Low</option>
+          <option value="medium" selected>Medium</option>
+          <option value="high">High</option>
+        </select>
+      </div>
+      <div class="config-group">
+        <label>Firewall Mode</label>
+        <select id="cfgFirewallMode">
+          <option value="monitor" selected>Monitor</option>
+          <option value="gateway">Gateway</option>
+        </select>
+      </div>
+      <div class="config-group">
+        <label>Enforcement Mode</label>
+        <select id="cfgEnforcement">
+          <option value="log-only" selected>Log Only</option>
+          <option value="alert">Alert</option>
+        </select>
+      </div>
+      <div class="config-group">
+        <label>AI Enabled</label>
+        <select id="cfgAI">
+          <option value="false" selected>Disabled</option>
+          <option value="true">Enabled</option>
+        </select>
+      </div>
+      <button class="btn-primary" onclick="saveConfig()">Save Configuration</button>
+      <div id="configMsg" style="margin-top:12px;font-size:13px"></div>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<script>
+// ── Navigation ────────────────────────────────────────────────
+function showPage(name,btn){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.getElementById('page-'+name).classList.add('active');
+  document.querySelectorAll('.nav button').forEach(b=>b.classList.remove('active'));
+  if(btn)btn.classList.add('active');
+  if(name==='health')loadHealth();
+  if(name==='incidents')loadIncidents();
+  if(name==='devices')loadDevices();
+  if(name==='traffic')loadTraffic();
+}
+
+// ── CSRF Token ──────────────────────────────────────────────────
+let csrfToken = localStorage.getItem('falconx_csrf') || '';
+function setCsrfToken(t) { csrfToken = t; localStorage.setItem('falconx_csrf', t); }
+
+// ── API helper ────────────────────────────────────────────────
+async function api(path,opts={}){
+  try{
+    const headers = {...(opts.headers||{})};
+    if(opts.method && opts.method !== 'GET') {
+      headers['X-CSRF-Token'] = csrfToken;
+    }
+    const r=await fetch(path,{credentials:'same-origin',...opts,headers});
+    if(r.status===401){window.location.href='/login';return null}
+    if(r.status===403){console.warn('CSRF validation failed');return null}
+    return await r.json();
+  }catch(e){return null}
+}
+
+// ── Logout ────────────────────────────────────────────────────
+async function logout(){
+  await api('/api/logout',{method:'POST'});
+  window.location.href='/login';
+}
+
+// ── Overview ──────────────────────────────────────────────────
+async function loadOverview(){
+  const data=await api('/api/status');
+  if(!data)return;
+
+  const s=data.system||{};
+  const e=data.engine||{};
+  const n=data.network||{};
+  const inc=data.incidents||{};
+
+  const statusMap={'PROTECTED':'status-protected','DEGRADED':'status-degraded','UNPROTECTED':'status-unprotected'};
+  const el=document.getElementById('overallStatus');
+  el.textContent=data.overall_status||'UNKNOWN';
+  el.className='status '+(statusMap[data.overall_status]||'');
+
+  document.getElementById('overviewCards').innerHTML=`
+    <div class="card"><h3>Engine Status</h3><div class="value" style="color:${e.status==='running'?'#10b981':'#ef4444'}">${e.status||'unknown'}</div><div class="sub">Uptime: ${formatUptime(e.uptime)} | Protection: ${e.protection_state||'UNKNOWN'}</div></div>
+    <div class="card"><h3>Devices</h3><div class="value">${(n.known_devices||0)+(n.unknown_devices||0)}</div><div class="sub">Known: ${n.known_devices||0} | Unknown: ${n.unknown_devices||0} | Learning: ${n.learning_devices||0}</div></div>
+    <div class="card"><h3>Active Incidents</h3><div class="value" style="color:${(inc.open||0)>0?'#f59e0b':'#10b981'}">${inc.open||0}</div><div class="sub">Open incidents</div></div>
+    <div class="card"><h3>Risk Level</h3><div class="value">${getHighestRisk(inc.by_severity)}</div><div class="sub">Current threat level</div></div>
+  `;
+
+  const cpu=s.cpu||{};
+  const mem=s.memory||{};
+  const disk=s.disk||{};
+  const temp=s.temperature||{};
+
+  document.getElementById('systemResources').innerHTML=`
+    <div style="margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;font-size:13px"><span>CPU</span><span>${cpu.value||0}%</span></div>
+      <div class="bar"><div class="bar-fill" style="width:${cpu.value||0}%;background:${cpu.status==='HEALTHY'?'#10b981':cpu.status==='DEGRADED'?'#f59e0b':'#ef4444'}"></div></div>
+    </div>
+    <div style="margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;font-size:13px"><span>Memory</span><span>${mem.value||0}%</span></div>
+      <div class="bar"><div class="bar-fill" style="width:${mem.value||0}%;background:${mem.status==='HEALTHY'?'#10b981':mem.status==='DEGRADED'?'#f59e0b':'#ef4444'}"></div></div>
+    </div>
+    <div style="margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;font-size:13px"><span>Disk</span><span>${disk.value||0}%</span></div>
+      <div class="bar"><div class="bar-fill" style="width:${disk.value||0}%;background:${disk.status==='HEALTHY'?'#10b981':disk.status==='DEGRADED'?'#f59e0b':'#ef4444'}"></div></div>
+    </div>
+    <div style="font-size:13px;color:var(--dim)">Temperature: ${temp.value?temp.value+'°C':'N/A'}</div>
+  `;
+
+  // AI status
+  const ai=data.ai||{};
+  const aiDot=document.getElementById('aiDot');
+  const aiText=document.getElementById('aiText');
+  if(ai.available){aiDot.style.background='#10b981';aiText.textContent='AI: Online'}
+  else{aiDot.style.background='#6b7280';aiText.textContent='AI: Offline'}
+
+  // ML status
+  const ml=data.ml||{};
+  const mlState=ml.state||'UNKNOWN';
+  const mlColors={'LEARNING':'#f59e0b','TRAINING':'#3b82f6','ACTIVE':'#10b981','UNAVAILABLE':'#ef4444','DISABLED':'#6b7280','STARTUP':'#6b7280'};
+  const mlEl=document.getElementById('mlStatus');
+  if(mlEl){
+    mlEl.style.color=mlColors[mlState]||'#6b7280';
+    mlEl.textContent='ML: '+mlState;
+    if(mlState==='LEARNING'){mlEl.textContent+=' ('+ml.buffer_size+'/'+200+' samples)'}
+  }
+}
+
+// ── Incidents ─────────────────────────────────────────────────
+async function loadIncidents(){
+  const data=await api('/api/incidents');
+  const incidents=data?.incidents||[];
+  const tbody=document.getElementById('incidentsTable');
+  const empty=document.getElementById('noIncidents');
+
+  if(!incidents.length){tbody.innerHTML='';empty.style.display='block';return}
+  empty.style.display='none';
+
+  tbody.innerHTML=incidents.map(i=>{
+    const evidence=(i.evidence||[]).slice(0,2).join('; ')||'';
+    const ai=i.ai_analysis||{};
+    const aiText=ai.summary?ai.summary.substring(0,60)+'...':'—';
+    return `<tr>
+      <td style="font-family:monospace;font-size:11px">${i.incident_id||''}</td>
+      <td>${i.device_ip||''}</td>
+      <td>${formatTime(i.timestamp)}</td>
+      <td>${i.event_type||''}</td>
+      <td><span class="badge badge-${(i.severity||'low').toLowerCase()}">${i.severity||'?'}</span></td>
+      <td>${i.risk_score||0}/100</td>
+      <td>${Math.round((i.confidence||0)*100)}%</td>
+      <td style="font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis" title="${(i.evidence||[]).join(' | ')}">${evidence}</td>
+      <td><span class="badge badge-${(i.status||'open').toLowerCase()}">${i.status||'?'}</span></td>
+      <td style="font-size:11px;max-width:150px;overflow:hidden;text-overflow:ellipsis" title="${ai.summary||''}">${aiText}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Devices ───────────────────────────────────────────────────
+async function loadDevices(){
+  const data=await api('/api/devices');
+  const devices=data?.devices||[];
+  const tbody=document.getElementById('devicesTable');
+  tbody.innerHTML=devices.map(d=>`
+    <tr>
+      <td>${d.ip||'N/A'}</td>
+      <td>${d.status||'Unknown'}</td>
+      <td>${d.total_flows||d.flows||0}</td>
+      <td>${d.reputation_score?Math.round(d.reputation_score*100)+'%':'N/A'}</td>
+      <td>${d.first_seen?formatTime(d.first_seen):'N/A'}</td>
+      <td>${d.last_seen?formatTime(d.last_seen):'N/A'}</td>
+    </tr>
+  `).join('')||'<tr><td colspan="6" class="empty">No device data available yet</td></tr>';
+}
+
+// ── Traffic ───────────────────────────────────────────────────
+async function loadTraffic(){
+  const data=await api('/api/traffic');
+  if(!data)return;
+
+  document.getElementById('trafficCards').innerHTML=`
+    <div class="card"><h3>Total Packets</h3><div class="value">${formatNum(data.total_packets||0)}</div></div>
+    <div class="card"><h3>Active Flows</h3><div class="value">${data.active_flows||0}</div></div>
+    <div class="card"><h3>Total Flows</h3><div class="value">${formatNum(data.total_flows||0)}</div></div>
+    <div class="card"><h3>Drop Rate</h3><div class="value">${((data.drop_rate||0)*100).toFixed(2)}%</div></div>
+  `;
+
+  document.getElementById('trafficStats').innerHTML=`
+    <div style="font-size:13px;color:var(--dim)">
+      Packets captured: ${formatNum(data.packets_captured||0)}<br>
+      Packets dropped: ${formatNum(data.packets_dropped||0)}<br>
+      Drop rate: ${((data.drop_rate||0)*100).toFixed(4)}%
+    </div>
+  `;
+}
+
+// ── Health ────────────────────────────────────────────────────
+async function loadHealth(){
+  const data=await api('/api/health');
+  if(!data)return;
+  const comps=data.components||{};
+  const html=Object.entries(comps).map(([name,c])=>`
+    <div class="health-row">
+      <div class="health-dot health-${(c.status||'healthy').toLowerCase()}"></div>
+      <div style="flex:1;font-size:13px;text-transform:capitalize">${name}</div>
+      <div style="font-size:12px;color:var(--dim)">${c.message||''}</div>
+      <div style="font-size:12px;font-weight:600;color:${c.status==='HEALTHY'?'#10b981':c.status==='DEGRADED'?'#f59e0b':'#ef4444'}">${c.status||'UNKNOWN'}</div>
+    </div>
+  `).join('');
+  document.getElementById('healthList').innerHTML=html;
+}
+
+// ── Config ────────────────────────────────────────────────────
+async function saveConfig(){
+  const msg=document.getElementById('configMsg');
+  const data={
+    detection:{sensitivity:document.getElementById('cfgSensitivity').value},
+    enforcement:{mode:document.getElementById('cfgEnforcement').value},
+  };
+  const r=await api('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+  if(r?.success){msg.style.color='#10b981';msg.textContent='Configuration saved'}
+  else{msg.style.color='#ef4444';msg.textContent=r?.error||'Save failed'}
+}
+
+// ── Helpers ───────────────────────────────────────────────────
+function formatUptime(s){if(!s)return'0s';const h=Math.floor(s/3600);const m=Math.floor((s%3600)/60);return h>0?h+'h '+m+'m':m+'m'}
+function formatTime(ts){if(!ts)return'';return new Date(ts*1000).toLocaleString()}
+function formatNum(n){return n>=1000000?(n/1000000).toFixed(1)+'M':n>=1000?(n/1000).toFixed(1)+'K':n}
+function getHighestRisk(sev){if(!sev)return'LOW';if(sev.CRITICAL>0)return'CRITICAL';if(sev.HIGH>0)return'HIGH';if(sev.MEDIUM>0)return'MEDIUM';return'LOW'}
+
+// ── Auto-refresh ──────────────────────────────────────────────
+loadOverview();
+setInterval(loadOverview,15000);
+</script>
+</body>
+</html>

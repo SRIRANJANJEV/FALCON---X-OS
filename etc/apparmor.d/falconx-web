@@ -1,0 +1,96 @@
+# FALCON-X AppArmor Profile — Web Dashboard Service
+# Deny everything not explicitly allowed
+
+#include <tunables/global>
+
+profile falconx-web /opt/falconx/dashboard/web.py {
+    # ── Include base abstractions ──────────────────────────────────
+    #include <abstractions/base>
+    #include <abstractions/nameservice>
+
+    # ── Allowed executables ────────────────────────────────────────
+    /usr/bin/python3 mr,
+
+    # ── Python standard library ────────────────────────────────────
+    /usr/lib/python3*/** r,
+    /usr/lib/python3*/lib-dynload/** mr,
+
+    # ── FALCON-X application code (read-only) ─────────────────────
+    /opt/falconx/dashboard/** r,
+    /opt/falconx/dashboard/web.py r,
+
+    # ── Configuration (read-only) ──────────────────────────────────
+    /etc/falconx/falconx.yaml r,
+    /etc/falconx/security.yaml r,
+    /etc/falconx/network.yaml r,
+
+    # ── Runtime data (read-write, own files only) ─────────────────
+    /var/lib/falconx/web.status rw,
+    /var/lib/falconx/ r,
+
+    # ── Read other services' status files (for dashboard display) ──
+    /var/lib/falconx/engine.status r,
+
+    # ── Logging ────────────────────────────────────────────────────
+    /var/log/falconx/ r,
+    /var/log/falconx/web.log w,
+    /var/log/falconx/** w,
+
+    # ── Network access ─────────────────────────────────────────────
+    network inet stream,
+    network inet dgram,
+    network unix stream,
+
+    # Bind on all interfaces (port 8443) — externally accessible
+    bind sock_addr addr=0.0.0.0:8443,
+
+    # ── /proc access ───────────────────────────────────────────────
+    /proc/self/status r,
+    /proc/meminfo r,
+
+    # ── TLS certificates (read-only) ──────────────────────────────
+    /etc/falconx/secrets/server.crt r,
+    /etc/falconx/secrets/server.key r,
+
+    # ── Signals ────────────────────────────────────────────────────
+    signal (receive) peer=falconx-web,
+    signal (send) peer=falconx-web,
+
+    # ── Deny everything else ───────────────────────────────────────
+
+    # Deny modifying other services' data
+    deny /var/lib/falconx/engine.status w,
+
+    # Deny master key access
+    deny /etc/falconx/secrets/master.key r,
+    deny /etc/falconx/secrets/*.key w,
+
+    # Deny sensitive system files
+    deny /etc/shadow r,
+    deny /etc/gshadow r,
+    deny /etc/passwd w,
+    deny /etc/group w,
+    deny /etc/sudoers* rw,
+    deny /etc/ssh/** rw,
+
+    # Deny SSH keys
+    deny /home/**/.ssh/** rw,
+    deny /root/.ssh/** rw,
+
+    # Deny kernel module operations
+    deny /sys/module/** rw,
+    deny /proc/sys/** w,
+
+    # Deny ptrace
+    deny ptrace (trace),
+
+    # Deny raw disk access
+    deny /dev/sd* rw,
+    deny /dev/mmcblk* rw,
+
+    # Deny writing to executable
+    deny /opt/falconx/dashboard/*.py w,
+
+    # Deny creating setuid/setgid files
+    deny /usr/bin/** mkrw,
+}

@@ -1,0 +1,96 @@
+# FALCON-X OS — Security Configuration (Hardened)
+
+hardening:
+  enabled: true
+  applied_date: ""
+  version: "0.1.0"
+
+  ssh:
+    port: 22
+    password_auth: false
+    root_login: false
+    key_only: true
+    max_auth_tries: 3
+    login_grace_time: 60
+    allow_groups:
+      - falconx-admin
+      - ssh-users
+
+  firewall:
+    mode: "monitor"  # monitor or gateway
+    engine: "nftables"
+    default_input: "DROP"
+    default_output: "ACCEPT"
+    default_forward: "DROP"
+    rate_limiting: true
+    logging: true
+
+  kernel:
+    aslr: 2
+    dmesg_restrict: true
+    syn_cookies: true
+    source_routing_disabled: true
+    redirects_disabled: true
+
+  systemd:
+    sandboxing: "full"
+    capability_bounding: true
+    syscall_filtering: true
+    namespace_restriction: true
+
+  apparmor:
+    enabled: true
+    profiles:
+      - falconx-engine
+      - falconx-web
+      - falconx-enforcer
+
+users:
+  shell_policy: "/usr/sbin/nologin"
+  require_strong_password: true
+  min_password_length: 12
+  lock_after_failed_attempts: 5
+  lock_duration_minutes: 30
+
+audit:
+  enabled: true
+  log_auth: true
+  log_commands: true
+  log_network: true
+  log_firewall: true
+  log_config_changes: true
+  retention_days: 90
+
+update:
+  enabled: true
+  signature_verification: true
+  integrity_verification: true
+  auto_update: false
+  check_interval_hours: 24
+  channel: "stable"
+
+monitoring:
+  enabled: true
+  metrics_retention_days: 30
+  alert_on_critical: true
+  alert_methods:
+    - log
+    - syslog
+    - security-log
+
+integrity:
+  enabled: true
+  protected_paths:
+    - "/opt/falconx/bin"
+    - "/etc/falconx"
+    - "/etc/systemd/system/falconx*"
+  check_interval_seconds: 300
+
+secrets:
+  master_key_path: "/etc/falconx/secrets/master.key"
+  tls_cert_path: "/etc/falconx/secrets/server.crt"
+  tls_key_path: "/etc/falconx/secrets/server.key"
+  signing_key_path: "/etc/falconx/secrets/signing.key"
+  api_key_path: "/etc/falconx/secrets/api.key"
+  rotate_interval_days: 90
+  encryption_algorithm: "AES-256-GCM"

@@ -1,0 +1,46 @@
+[Unit]
+Description=FALCON-X Enforcer — Privileged nftables enforcement helper
+After=network-online.target nftables.service
+Wants=nftables.service
+Documentation=file:///opt/falconx/engine/enforcer.py
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/usr/bin/python3 /opt/falconx/engine/enforcer.py
+Restart=always
+RestartSec=5
+StartLimitInterval=60
+StartLimitBurst=5
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=falconx-enforcer
+
+# Sandboxing (minimal — this IS the privileged component)
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+NoNewPrivileges=false
+
+# Only nftables capability needed
+CapabilityBoundingSet=CAP_NET_ADMIN
+AmbientCapabilities=CAP_NET_ADMIN
+
+# Restrict system calls
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @reboot @swap @clock @cpu-emulation @debug @obsolete
+
+# Network restrictions — only needs netlink for nftables
+RestrictAddressFamilies=AF_UNIX AF_NETLINK
+
+# Resource limits for RPi4
+LimitNOFILE=256
+TasksMax=16
+MemoryMax=64M
+CPUQuota=5%
+
+[Install]
+WantedBy=multi-user.target

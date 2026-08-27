@@ -1,0 +1,10 @@
+*************************************************************
+*                    FALCON-X SECURITY                       *
+*                  AUTHORIZED ACCESS ONLY                    *
+*                                                           *
+*  This system is a FALCON-X security appliance.            *
+*  All connections are logged and monitored.                 *
+*  Unauthorized access attempts will be reported.            *
+*                                                           *
+*  Disconnect IMMEDIATELY if you are not authorized.         *
+*************************************************************

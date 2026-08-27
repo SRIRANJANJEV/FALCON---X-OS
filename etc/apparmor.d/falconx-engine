@@ -1,0 +1,101 @@
+# FALCON-X AppArmor Profile — Engine Service
+# Confinement for the core detection engine (main.py)
+# Deny everything not explicitly allowed
+
+#include <tunables/global>
+
+profile falconx-engine /opt/falconx/engine/main.py {
+    # ── Include base abstractions ──────────────────────────────────
+    #include <abstractions/base>
+    #include <abstractions/nameservice>
+
+    # ── Allowed executables ────────────────────────────────────────
+    /usr/bin/python3 mr,
+
+    # ── Python standard library ────────────────────────────────────
+    /usr/lib/python3*/** r,
+    /usr/lib/python3*/lib-dynload/** mr,
+
+    # ── FALCON-X application code (read-only) ─────────────────────
+    /opt/falconx/engine/** r,
+    /opt/falconx/engine/main.py r,
+
+    # ── Configuration (read-only) ──────────────────────────────────
+    /etc/falconx/falconx.yaml r,
+    /etc/falconx/engine.yaml r,
+    /etc/falconx/security.yaml r,
+
+    # ── Runtime data (read-write, own files only) ─────────────────
+    /var/lib/falconx/ r,
+    /var/lib/falconx/engine.status rw,
+    /var/lib/falconx/baseline/ rw,
+    /var/lib/falconx/baseline/** rw,
+    /var/lib/falconx/incidents/ rw,
+    /var/lib/falconx/incidents/** rw,
+    /var/lib/falconx/protection-state.json rw,
+    /var/lib/falconx/device-id r,
+
+    # ── Logging ────────────────────────────────────────────────────
+    /var/log/falconx/ r,
+    /var/log/falconx/engine.log w,
+    /var/log/falconx/** w,
+
+    # ── Network access ─────────────────────────────────────────────
+    network inet stream,
+    network inet dgram,
+    network unix stream,
+    network netlink raw,
+
+    # Bind to localhost only (port 9100)
+    bind sock_addr addr=127.0.0.1:9100,
+
+    # ── /proc access ───────────────────────────────────────────────
+    /proc/sys/kernel/random/uuid r,
+    /proc/self/status r,
+    /proc/meminfo r,
+    /proc/net/dev r,
+    /proc/net/tcp r,
+    /proc/net/udp r,
+
+    # ── Scapy raw socket access (CAP_NET_RAW via systemd) ─────────
+    # Raw AF_PACKET sockets are needed for packet capture
+    # This is granted via AmbientCapabilities=CAP_NET_RAW in the service file
+
+    # ── Signals ────────────────────────────────────────────────────
+    signal (receive) peer=falconx-engine,
+    signal (send) peer=falconx-engine,
+
+    # ── Deny everything else ───────────────────────────────────────
+
+    # Deny access to other services' data
+    deny /var/lib/falconx/web.status rw,
+
+    # Deny secrets (engine should not need them)
+    deny /etc/falconx/secrets/** rw,
+
+    # Deny sensitive system files
+    deny /etc/shadow r,
+    deny /etc/gshadow r,
+    deny /etc/passwd w,
+    deny /etc/group w,
+    deny /etc/sudoers* rw,
+    deny /etc/ssh/** rw,
+
+    # Deny SSH keys
+    deny /home/**/.ssh/** rw,
+    deny /root/.ssh/** rw,
+
+    # Deny kernel module operations
+    deny /sys/module/** rw,
+    deny /proc/sys/** w,
+
+    # Deny ptrace
+    deny ptrace (trace),
+
+    # Deny raw disk access
+    deny /dev/sd* rw,
+    deny /dev/mmcblk* rw,
+
+    # Deny writing to executable
+    deny /opt/falconx/engine/*.py w,
+}

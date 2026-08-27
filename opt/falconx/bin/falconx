@@ -1,0 +1,316 @@
+#!/usr/bin/env python3
+"""FALCON-X CLI — Command-line interface for managing the security appliance."""
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+import urllib.request
+from pathlib import Path
+from typing import Optional
+
+VERSION = "0.1.0"
+CONFIG_DIR = Path("/etc/falconx")
+STATUS_DIR = Path("/var/lib/falconx")
+LOG_DIR = Path("/var/log/falconx")
+
+# Colors
+RED = "\033[91m"
+GREEN = "\033[92m"
+YELLOW = "\033[93m"
+CYAN = "\033[96m"
+BOLD = "\033[1m"
+DIM = "\033[2m"
+RESET = "\033[0m"
+
+
+def print_header():
+    print(f"{CYAN}{BOLD}")
+    print("  ███████╗ █████╗ ███████╗██╗  ██╗ ██████╗ ██████╗  ██████╗ ██╗   ██╗███╗   ██╗██████╗ ")
+    print("  ██╔════╝██╔══██╗██╔════╝██║  ██║██╔═══██╗██╔══██╗██╔═══██╗██║   ██║████╗  ██║██╔══██╗")
+    print("  █████╗  ███████║███████╗███████║██║   ██║██║  ██║██║   ██║██║   ██║██╔██╗ ██║██║  ██║")
+    print("  ██╔══╝  ██╔══██║╚════██║██╔══██║██║   ██║██║  ██║██║   ██║██║   ██║██║╚██╗██║██║  ██║")
+    print("  ███████╗██║  ██║███████║██║  ██║╚██████╔╝██████╔╝╚██████╔╝╚██████╔╝██║ ╚████║██████╔╝")
+    print("  ╚══════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚═════╝  ╚═════╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝ ")
+    print(f"{RESET}")
+
+
+def cmd_status(args):
+    """Show system status."""
+    print(f"\n{BOLD}FALCON-X Status{RESET}\n")
+
+    # Check each service
+    services = {
+        "engine": 9100,
+        "detector": 9101,
+        "ai": 9102,
+        "web": 8443,
+    }
+
+    all_ok = True
+    for name, port in services.items():
+        try:
+            url = f"http://127.0.0.1:{port}/health"
+            req = urllib.request.Request(url, method="GET")
+            with urllib.request.urlopen(req, timeout=3) as resp:
+                data = json.loads(resp.read().decode())
+                status = data.get("status", "unknown")
+                pid = data.get("pid", "?")
+                if status == "running":
+                    print(f"  {GREEN}●{RESET} {name:<12} running (pid={pid})")
+                else:
+                    print(f"  {YELLOW}●{RESET} {name:<12} {status}")
+                    all_ok = False
+        except ConnectionRefusedError:
+            print(f"  {RED}●{RESET} {name:<12} stopped")
+            all_ok = False
+        except Exception:
+            print(f"  {RED}●{RESET} {name:<12} unavailable")
+            all_ok = False
+
+    # Device info
+    device_id_file = STATUS_DIR / "device-id"
+    if device_id_file.exists():
+        device_id = device_id_file.read_text().strip()
+        print(f"\n  Device ID: {device_id}")
+
+    print(f"  Hostname:  {subprocess.getoutput('hostname')}")
+    print()
+
+    if all_ok:
+        print(f"  {GREEN}All services operational{RESET}")
+    else:
+        print(f"  {YELLOW}Some services are not running{RESET}")
+    print()
+
+
+def cmd_health(args):
+    """Run health check."""
+    try:
+        cmd_args = [sys.executable, "/opt/falconx/scripts/healthcheck.py"]
+        if args.no_color:
+            cmd_args.append("--no-color")
+        if args.json:
+            cmd_args.append("--json")
+        result = subprocess.run(cmd_args, capture_output=True, text=True, timeout=30)
+        print(result.stdout)
+        if result.stderr:
+            print(result.stderr, file=sys.stderr)
+        sys.exit(result.returncode)
+    except FileNotFoundError:
+        print("Health check script not found at /opt/falconx/scripts/healthcheck.py", file=sys.stderr)
+        sys.exit(2)
+
+
+def cmd_network(args):
+    """Show network information."""
+    print(f"\n{BOLD}FALCON-X Network{RESET}\n")
+
+    # Show interfaces
+    try:
+        result = subprocess.run(["ip", "-brief", "addr", "show"], capture_output=True, text=True, timeout=5)
+        if result.returncode == 0:
+            print(f"{BOLD}Interfaces:{RESET}")
+            for line in result.stdout.strip().split("\n")[1:]:
+                parts = line.split()
+                if len(parts) >= 4:
+                    name, state, addrs = parts[0], parts[1], " ".join(parts[2:])
+                    color = GREEN if state == "UP" else RED
+                    print(f"  {color}{state:<6}{RESET} {name:<12} {addrs}")
+    except Exception as e:
+        print(f"  Could not retrieve interface info: {e}")
+
+    print()
+
+    # Show default route
+    try:
+        result = subprocess.run(["ip", "route", "show", "default"], capture_output=True, text=True, timeout=5)
+        if result.returncode == 0 and result.stdout.strip():
+            print(f"{BOLD}Default Route:{RESET}")
+            print(f"  {result.stdout.strip()}")
+    except Exception:
+        pass
+
+    print()
+
+    # Show DNS
+    try:
+        with open("/etc/resolv.conf") as f:
+            nameservers = [line.split()[-1] for line in f if line.startswith("nameserver")]
+            if nameservers:
+                print(f"{BOLD}DNS Servers:{RESET}")
+                for ns in nameservers:
+                    print(f"  {ns}")
+    except Exception:
+        pass
+
+    print()
+
+
+def cmd_config(args):
+    """Show or edit configuration."""
+    config_file = CONFIG_DIR / "falconx.yaml"
+
+    if args.show:
+        if config_file.exists():
+            with open(config_file) as f:
+                print(f.read())
+        else:
+            print(f"Configuration not found at {config_file}")
+        return
+
+    if args.set:
+        key, value = args.set.split("=", 1)
+        config_path = os.path.join(CONFIG_DIR, "falconx.yaml")
+        if not os.path.exists(config_path):
+            print(f"Config not found: {config_path}")
+            return
+        try:
+            import yaml
+            with open(config_path) as f:
+                config = yaml.safe_load(f) or {}
+            # Support dotted keys like "detection.sensitivity"
+            parts = key.split(".")
+            obj = config
+            for part in parts[:-1]:
+                obj = obj.setdefault(part, {})
+            obj[parts[-1]] = value
+            with open(config_path, "w") as f:
+                yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+            print(f"Set {key} = {value}")
+        except ImportError:
+            print("PyYAML not available")
+        except Exception as e:
+            print(f"Error: {e}")
+        return
+
+    # Default: show config path
+    print(f"Configuration: {config_file}")
+
+
+def cmd_start(args):
+    """Start FALCON-X services."""
+    print(f"\n{BOLD}Starting FALCON-X services...{RESET}\n")
+
+    services = ["falconx-engine", "falconx-web", "falconx-health", "falconx-enforcer"]
+    for service in services:
+        result = subprocess.run(
+            ["systemctl", "start", f"{service}.service"],
+            capture_output=True, text=True
+        )
+        if result.returncode == 0:
+            print(f"  {GREEN}✓{RESET} {service} started")
+        else:
+            print(f"  {RED}✗{RESET} {service} failed: {result.stderr.strip()}")
+
+    print()
+
+
+def cmd_stop(args):
+    """Stop FALCON-X services."""
+    print(f"\n{BOLD}Stopping FALCON-X services...{RESET}\n")
+
+    services = ["falconx-enforcer", "falconx-health", "falconx-web", "falconx-engine"]
+    for service in services:
+        result = subprocess.run(
+            ["systemctl", "stop", f"{service}.service"],
+            capture_output=True, text=True
+        )
+        if result.returncode == 0:
+            print(f"  {GREEN}✓{RESET} {service} stopped")
+        else:
+            print(f"  {RED}✗{RESET} {service} failed: {result.stderr.strip()}")
+
+    print()
+
+
+def cmd_restart(args):
+    """Restart FALCON-X services."""
+    cmd_stop(args)
+    print()
+    cmd_start(args)
+
+
+def cmd_logs(args):
+    """Show service logs."""
+    service = args.service or "falconx-engine"
+    lines = args.lines or 50
+
+    cmd = ["journalctl", "-u", f"{service}.service", "--no-pager", "-n", str(lines)]
+
+    if args.follow:
+        cmd.append("-f")
+
+    subprocess.run(cmd)
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        prog="falconx",
+        description="FALCON-X Security Appliance CLI"
+    )
+    parser.add_argument("--version", action="version", version=f"FALCON-X {VERSION}")
+
+    subparsers = parser.add_subparsers(dest="command", help="Available commands")
+
+    # status
+    subparsers.add_parser("status", help="Show system status")
+
+    # health
+    health_parser = subparsers.add_parser("health", help="Run health check")
+    health_parser.add_argument("--json", action="store_true", help="Output JSON")
+    health_parser.add_argument("--no-color", action="store_true", help="Disable colors")
+
+    # network
+    subparsers.add_parser("network", help="Show network information")
+
+    # config
+    config_parser = subparsers.add_parser("config", help="Configuration management")
+    config_parser.add_argument("--show", action="store_true", help="Show configuration")
+    config_parser.add_argument("--set", type=str, help="Set config value (key=value)")
+
+    # start
+    subparsers.add_parser("start", help="Start FALCON-X services")
+
+    # stop
+    subparsers.add_parser("stop", help="Stop FALCON-X services")
+
+    # restart
+    subparsers.add_parser("restart", help="Restart FALCON-X services")
+
+    # logs
+    logs_parser = subparsers.add_parser("logs", help="Show service logs")
+    logs_parser.add_argument("service", nargs="?", default="falconx-engine",
+                             help="Service name (default: falconx-engine)")
+    logs_parser.add_argument("-n", "--lines", type=int, default=50,
+                             help="Number of lines (default: 50)")
+    logs_parser.add_argument("-f", "--follow", action="store_true",
+                             help="Follow log output")
+
+    args = parser.parse_args()
+
+    if not args.command:
+        print_header()
+        parser.print_help()
+        return
+
+    commands = {
+        "status": cmd_status,
+        "health": cmd_health,
+        "network": cmd_network,
+        "config": cmd_config,
+        "start": cmd_start,
+        "stop": cmd_stop,
+        "restart": cmd_restart,
+        "logs": cmd_logs,
+    }
+
+    if args.command in commands:
+        commands[args.command](args)
+    else:
+        parser.print_help()
+
+
+if __name__ == "__main__":
+    main()

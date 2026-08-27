@@ -1,0 +1,77 @@
+[Unit]
+Description=FALCON-X Engine — Core Detection Pipeline
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=falconx-engine
+Group=falconx-engine
+ExecStart=/usr/bin/python3 /opt/falconx/engine/main.py
+Restart=always
+RestartSec=5
+StartLimitInterval=60
+StartLimitBurst=5
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=falconx-engine
+
+# ── Filesystem sandboxing ─────────────────────────────────────────
+RuntimeDirectory=falconx
+RuntimeDirectoryMode=0755
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/falconx /var/log/falconx /run/falconx
+ReadOnlyPaths=/etc/falconx /opt/falconx
+
+# ── Privilege restrictions ────────────────────────────────────────
+NoNewPrivileges=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+
+# ── Capability restrictions ───────────────────────────────────────
+# CAP_NET_RAW required for Scapy packet capture (AF_PACKET sockets)
+CapabilityBoundingSet=CAP_NET_RAW
+AmbientCapabilities=CAP_NET_RAW
+
+# ── System call filtering ─────────────────────────────────────────
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources @obsolete
+
+# ── Memory restrictions ───────────────────────────────────────────
+# Python needs W^X for JIT/eval — MemoryDenyWriteExecute=false is required
+MemoryDenyWriteExecute=false
+LockPersonality=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+
+# ── Namespace restrictions ────────────────────────────────────────
+RestrictNamespaces=true
+
+# ── Device restrictions ───────────────────────────────────────────
+# Needs network capture devices for Scapy
+PrivateDevices=false
+
+# ── Network restrictions ──────────────────────────────────────────
+# AF_INET for health endpoint, AF_PACKET for Scapy capture
+RestrictAddressFamilies=AF_INET AF_UNIX AF_NETLINK AF_PACKET
+
+# ── Resource limits (Raspberry Pi 4 optimized) ────────────────────
+LimitNOFILE=4096
+LimitNPROC=512
+TasksMax=256
+MemoryMax=512M
+CPUQuota=80%
+
+# ── OOM protection ────────────────────────────────────────────────
+OOMScoreAdjust=-500
+
+[Install]
+WantedBy=multi-user.target

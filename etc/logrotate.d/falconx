@@ -1,0 +1,28 @@
+/var/log/falconx/*.log {
+    daily
+    rotate 7
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 644 falconx-engine falconx-engine
+    sharedscripts
+    postrotate
+        systemctl reload falconx-engine 2>/dev/null || true
+        systemctl reload falconx-web 2>/dev/null || true
+    endscript
+}
+
+/var/log/falconx/security/*.log {
+    daily
+    rotate 90
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 640 root adm
+    sharedscripts
+    postrotate
+        /usr/lib/rsyslog/rsyslog-rotate 2>/dev/null || true
+    endscript
+}

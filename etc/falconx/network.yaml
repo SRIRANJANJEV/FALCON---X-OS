@@ -1,0 +1,81 @@
+# FALCON-X OS — Network Configuration
+
+interfaces:
+  ethernet:
+    enabled: true
+    name: "eth0"
+    method: "dhcp"
+    dhcp_timeout_seconds: 30
+    wake_on_lan: false
+
+  wifi:
+    enabled: false
+    name: "wlan0"
+    method: "dhcp"
+    ssid: ""
+    password: ""
+    country_code: "US"
+    hidden: false
+    priority: 10
+
+  loopback:
+    name: "lo"
+    address: "127.0.0.1"
+    netmask: "255.0.0.0"
+
+static:
+  address: ""
+  gateway: ""
+  netmask: "255.255.255.0"
+  dns:
+    - "1.1.1.1"
+    - "8.8.8.8"
+
+dns:
+  servers:
+    - "1.1.1.1"
+    - "8.8.8.8"
+  search_domains: []
+  use_resolved: true
+
+ntp:
+  enabled: true
+  servers:
+    - "0.pool.ntp.org"
+    - "1.pool.ntp.org"
+    - "time.google.com"
+  sync_on_boot: true
+  hardware_clock: false
+
+hostname:
+  template: "falconx-{device_id}"
+  domain: "local"
+
+firewall:
+  enabled: true
+  default_input: "DROP"
+  default_output: "ACCEPT"
+  default_forward: "DROP"
+  allowed_ports:
+    tcp:
+      - 22     # SSH
+      - 8443   # FALCON-X web dashboard
+      - 9100   # Engine
+    udp:
+      - 53     # DNS
+      - 123    # NTP
+  blocked_networks:
+    - "169.254.0.0/16"
+  rate_limit:
+    enabled: true
+    max_connections_per_minute: 100
+
+dns_server:
+  enabled: false
+  listen_address: "127.0.0.1"
+  listen_port: 5353
+  upstream_servers:
+    - "1.1.1.1"
+    - "8.8.8.8"
+  cache_enabled: true
+  cache_size: 1000

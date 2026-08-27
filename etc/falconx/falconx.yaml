@@ -1,0 +1,47 @@
+# FALCON-X OS — Main Configuration
+# Edge Cybersecurity Appliance
+
+system:
+  name: "FALCON-X"
+  version: "0.2.0"
+  mode: "standalone"
+  log_level: "info"
+  log_format: "json"
+
+identity:
+  device_id: ""
+  hostname: "falconx"
+  site_name: "default"
+
+engine:
+  enabled: true
+  listen_address: "127.0.0.1"
+  listen_port: 9100
+  max_concurrent_scans: 10
+  scan_timeout_seconds: 30
+  rules_path: "/opt/falconx/engine/rules"
+
+# Detection is integrated into the engine (main.py pipeline)
+# No separate detector service
+
+# AI is optional via OmniRoute client in dashboard
+# No separate AI service
+
+web:
+  enabled: true
+  listen_address: "0.0.0.0"
+  listen_port: 8443
+  tls_enabled: true
+  cert_path: "/etc/falconx/secrets/server.crt"
+  key_path: "/etc/falconx/secrets/server.key"
+  session_timeout_minutes: 30
+  max_sessions: 50
+
+health:
+  check_interval_seconds: 30
+  protected_components:
+    - engine
+    - firewall
+    - network
+  optional_components:
+    - web

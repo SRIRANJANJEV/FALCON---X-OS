@@ -1,0 +1,63 @@
+[Unit]
+Description=FALCON-X Web — Dashboard and Management Interface
+After=network-online.target falconx-engine.service
+Wants=network-online.target
+Requires=falconx-engine.service
+
+[Service]
+Type=simple
+User=falconx-web
+Group=falconx-web
+ExecStart=/usr/bin/python3 /opt/falconx/dashboard/web.py
+Restart=always
+RestartSec=5
+StartLimitInterval=60
+StartLimitBurst=5
+
+Environment=FALCONX_WEB_HOST=0.0.0.0
+Environment=FALCONX_WEB_PORT=8443
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=falconx-web
+
+RuntimeDirectory=falconx
+RuntimeDirectoryMode=0755
+
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/falconx /var/log/falconx /run/falconx
+ReadOnlyPaths=/etc/falconx /opt/falconx
+
+NoNewPrivileges=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources @obsolete
+
+MemoryDenyWriteExecute=false
+LockPersonality=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+PrivateDevices=true
+
+RestrictAddressFamilies=AF_INET AF_UNIX AF_NETLINK
+
+LimitNOFILE=1024
+TasksMax=128
+MemoryMax=256M
+CPUQuota=50%
+
+[Install]
+WantedBy=multi-user.target

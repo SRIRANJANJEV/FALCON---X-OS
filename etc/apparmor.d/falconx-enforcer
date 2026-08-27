@@ -1,0 +1,49 @@
+# FALCON-X AppArmor Profile — Enforcer Service
+# Privileged nftables helper — minimal permissions
+
+#include <tunables/global>
+
+profile falconx-enforcer /opt/falconx/engine/enforcer.py {
+    # ── Include base abstractions ──────────────────────────────────
+    #include <abstractions/base>
+
+    # ── Allowed executables ────────────────────────────────────────
+    /usr/bin/python3 mr,
+    /usr/sbin/nft mr,
+
+    # ── Python standard library ────────────────────────────────────
+    /usr/lib/python3*/** r,
+    /usr/lib/python3*/lib-dynload/** mr,
+
+    # ── Application code (read-only) ──────────────────────────────
+    /opt/falconx/engine/enforcer.py r,
+
+    # ── Command directory (writable) ──────────────────────────────
+    /run/falconx/enforcer/ rw,
+    /run/falconx/enforcer/*.json rw,
+    /run/falconx/enforcer/*.response rw,
+
+    # ── State and logs ────────────────────────────────────────────
+    /var/lib/falconx/ r,
+    /var/lib/falconx/enforcer-state.json rw,
+    /var/log/falconx/ r,
+    /var/log/falconx/security/ r,
+    /var/log/falconx/security/enforcement.log rw,
+
+    # ── nftables access ───────────────────────────────────────────
+    # The enforcer needs to run nft commands
+    # This is handled via CAP_NET_ADMIN in systemd, not AppArmor
+    # AppArmor cannot grant capabilities, only restrict file access
+
+    # ── Deny everything else ───────────────────────────────────────
+    deny /etc/shadow r,
+    deny /etc/gshadow r,
+    deny /etc/ssh/** rw,
+    deny /home/** rw,
+    deny /root/** rw,
+    deny /sys/module/** rw,
+    deny /proc/sys/** w,
+    deny ptrace (trace),
+    deny /dev/sd* rw,
+    deny /dev/mmcblk* rw,
+}
