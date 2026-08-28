@@ -36,7 +36,7 @@ STATE_FILE = "/var/lib/falconx/protection-state.json"
 CRITICAL_COMPONENTS = frozenset({"engine", "capture", "firewall", "network", "rules", "baseline"})
 
 # Components whose failure makes the system DEGRADED
-OPTIONAL_COMPONENTS = frozenset({"web", "health"})
+OPTIONAL_COMPONENTS = frozenset({"web", "health", "ai", "ml", "enforcement"})
 
 
 class ProtectionState(Enum):
@@ -71,7 +71,10 @@ class StateManager:
         self._state_changed_at = time.time()
         self._components: Dict[str, dict] = {}
         self._transition_log: List[dict] = []
-        self._lock = threading.Lock()
+        # Reentrant lock: update_component() holds the lock while it calls
+        # transition(), which acquires the same lock again. An RLock prevents
+        # the resultant self-deadlock.
+        self._lock = threading.RLock()
         self._listeners: List[Callable] = []
 
         self._load_state()
@@ -139,6 +142,8 @@ class StateManager:
                 "critical": name in CRITICAL_COMPONENTS,
             }
             self._recalculate_state()
+            # Persist component health even when the overall state is unchanged
+            self._save_state()
 
     def _recalculate_state(self):
         """Recalculate overall state from component health.
@@ -166,7 +171,10 @@ class StateManager:
                     optional_healthy = False
                     unhealthy_components.append(name)
 
-        if not critical_checked:
+        if not critical_checked and self._state in (
+            ProtectionState.BOOTING, ProtectionState.INITIALIZING
+        ):
+            # Still warming up (no critical component checked yet)
             new_state = ProtectionState.INITIALIZING
         elif not critical_healthy:
             new_state = ProtectionState.UNPROTECTED

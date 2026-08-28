@@ -30,18 +30,26 @@ from risk import RiskEngine
 from incidents import IncidentEngine
 from enforcement import EnforcementEngine
 from state import get_state_manager, ProtectionState
+import demo as demo_module
 
-LOG_DIR = Path("/var/log/falconx")
-CONFIG_DIR = Path("/etc/falconx")
-STATUS_FILE = Path("/var/lib/falconx/engine.status")
+LOG_DIR = Path(os.environ.get("FALCONX_ENGINE_LOG_DIR", "/var/log/falconx"))
+CONFIG_DIR = Path(os.environ.get("FALCONX_ETC_DIR", "/etc/falconx"))
+STATUS_FILE = Path(os.environ.get("FALCONX_ENGINE_STATUS", "/var/lib/falconx/engine.status"))
+
+_engine_handlers = [logging.StreamHandler()]
+_engine_file = LOG_DIR / "engine.log"
+if os.environ.get("FALCONX_ENGINE_LOG_DIR") or (
+    LOG_DIR.is_dir() and os.access(str(LOG_DIR), os.W_OK)
+):
+    try:
+        _engine_handlers.append(logging.FileHandler(str(_engine_file)))
+    except Exception:
+        pass
 
 logging.basicConfig(
     level=logging.INFO,
     format='{"time":"%(asctime)s","level":"%(levelname)s","component":"engine","message":"%(message)s"}',
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler(LOG_DIR / "engine.log"),
-    ],
+    handlers=_engine_handlers,
 )
 logger = logging.getLogger("falconx-engine")
 
@@ -98,6 +106,33 @@ class HealthHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(json.dumps(incidents, indent=2).encode())
 
+        elif self.path == "/demo":
+            engine = self.engine_ref
+            status = (
+                {"enabled": engine.demo_enabled, "phase": engine.demo_phase}
+                if engine else {"enabled": False, "phase": "disabled"}
+            )
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps(status).encode())
+
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+    def do_POST(self):
+        engine = self.engine_ref
+        if self.path == "/demo":
+            if engine and engine.demo_enabled:
+                engine.trigger_demo_attack()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"status": "started"}).encode())
+            else:
+                self.send_response(404)
+                self.end_headers()
         else:
             self.send_response(404)
             self.end_headers()
@@ -118,6 +153,15 @@ class Engine:
         self._last_health_check = time.time()
         self._batch_count = 0
         self._detection_count = 0
+
+        # Demo mode — synthetic, clearly-labelled demonstration of the pipeline
+        demo_cfg = self.config.get("demo", {}) or {}
+        env_demo = os.environ.get("FALCONX_DEMO_MODE", "false").lower() == "true"
+        self.demo_enabled = bool(demo_cfg.get("enabled", env_demo))
+        self.demo_auto = bool(demo_cfg.get("auto", True))
+        self.demo_phase = "disabled"
+        self._demo_thread = None
+        self._demo_stop = threading.Event()
 
         # Protection state machine
         self.state_manager = get_state_manager()
@@ -208,6 +252,59 @@ class Engine:
                 logger.error("Failed to load config: %s", e)
         return {}
 
+    def _inject_demo_flows(self, flow_features: list):
+        """Run synthetic flows through the REAL detection pipeline.
+
+        Mirrors _process_batch: baseline enrichment first (so device_status and
+        anomaly scores are computed), then the full detection pipeline.
+        """
+        if not flow_features:
+            return
+        try:
+            enriched = self.baseline.process_features(flow_features)
+            self.ml.update(enriched)
+            for features in enriched:
+                try:
+                    self._process_flow(features)
+                except Exception as e:
+                    logger.error("Demo flow processing error: %s", e)
+        except Exception as e:
+            logger.error("Demo batch error: %s", e)
+
+    def trigger_demo_attack(self):
+        """Manually trigger the full demo attack script (on-demand)."""
+        if not self.demo_enabled:
+            self.demo_enabled = True
+        script = demo_module.build_demo_script()
+        # Run async so the HTTP request returns immediately
+        self._demo_thread = threading.Thread(
+            target=self._play_demo_script, args=(script,), daemon=True
+        )
+        self._demo_thread.start()
+        return True
+
+    def _play_demo_script(self, script):
+        """Play the demo script on the real pipeline from a background thread."""
+        if self._demo_stop.is_set():
+            self._demo_stop.clear()
+        self.demo_phase = "running"
+        logger.info("Demo mode START — playing synthetic scenario")
+        for step in script:
+            if self._demo_stop.is_set():
+                break
+            delay = step.get("delay_before", 0)
+            if delay:
+                self._demo_stop.wait(delay)
+            self.demo_phase = step.get("label", "running")
+            self._inject_demo_flows(step.get("flows", []))
+        self.demo_phase = "complete"
+        logger.info("Demo mode COMPLETE — incidents %d",
+                    self.incidents.get_open_incident_count() if hasattr(self.incidents, "get_open_incident_count") else -1)
+
+    def _stop_demo(self):
+        self._demo_stop.set()
+        self.demo_phase = "disabled"
+
     def _process_batch(self, batch: list):
         """Main processing pipeline for each batch of packets."""
         self._batch_count += 1
@@ -279,7 +376,16 @@ class Engine:
                 )
 
             event_types = [ev.rule_name for ev in rule_events] if rule_events else ["anomaly"]
-            event_type = event_types[0] if event_types else "anomaly"
+            # Report the most severe detected rule so the incident reflects the
+            # primary threat rather than an arbitrary rule order.
+            if rule_events:
+                _sev_rank = {"LOW": 1, "MEDIUM": 2, "HIGH": 3, "CRITICAL": 4}
+                primary = max(
+                    rule_events, key=lambda ev: _sev_rank.get(ev.severity, 0)
+                )
+                event_type = primary.rule_name
+            else:
+                event_type = "anomaly"
 
             self.incidents.process_detection(
                 device_ip=features.get("src_ip", ""),
@@ -341,6 +447,15 @@ class Engine:
         self._write_status(self._status)
         logger.info("FALCON-X Engine running (status=%s)", self._status)
 
+        # Auto-start demo mode (clearly labelled — synthetic events only)
+        if self.demo_enabled and self.demo_auto:
+            script = demo_module.build_demo_script()
+            self._demo_thread = threading.Thread(
+                target=self._play_demo_script, args=(script,), daemon=True
+            )
+            self._demo_thread.start()
+            logger.info("Demo mode AUTO-START (synthetic pipeline demo)")
+
         # Main loop
         try:
             while running:
@@ -371,6 +486,7 @@ class Engine:
     def stop(self):
         """Stop the engine gracefully."""
         logger.info("Stopping FALCON-X Engine...")
+        self._stop_demo()
         self.state_manager.update_component("engine", False, "Engine shutting down")
         self.capture.stop()
 
@@ -496,6 +612,10 @@ class Engine:
                 "batch_count": self._batch_count,
                 "detection_count": self._detection_count,
                 "uptime": time.time() - self._start_time,
+            },
+            "demo": {
+                "enabled": self.demo_enabled,
+                "phase": self.demo_phase,
             },
         }
 

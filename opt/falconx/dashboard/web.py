@@ -28,13 +28,25 @@ from config import (
     ENGINE_API_URL, RATE_LIMIT_WINDOW,
 )
 
+# Log to /var/log/falconx/web.log in production. Tests/development can
+# override the path via FALCONX_WEB_LOG, or fall back to stream-only
+# logging when the log directory is not writable (e.g. non-root tests).
+_LOG_DIR = "/var/log/falconx"
+_LOG_FILE = os.environ.get("FALCONX_WEB_LOG", os.path.join(_LOG_DIR, "web.log"))
+
+_log_handlers = [logging.StreamHandler()]
+if os.environ.get("FALCONX_WEB_LOG") or (
+    os.path.isdir(_LOG_DIR) and os.access(_LOG_DIR, os.W_OK)
+):
+    try:
+        _log_handlers.append(logging.FileHandler(_LOG_FILE))
+    except Exception:
+        pass
+
 logging.basicConfig(
     level=logging.INFO,
     format='{"time":"%(asctime)s","level":"%(levelname)s","component":"web","message":"%(message)s"}',
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler("/var/log/falconx/web.log"),
-    ],
+    handlers=_log_handlers,
 )
 logger = logging.getLogger("falconx-web")
 
@@ -300,6 +312,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
         incidents = engine_stats.get("incidents", {})
         enforcement = engine_stats.get("enforcement", {})
         ml = engine_stats.get("ml", {})
+        demo = engine_stats.get("demo", {}) or {}
 
         return {
             "overall_status": health_data["overall"],
@@ -347,18 +360,42 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 "validation_score": ml.get("validation_score", 0),
                 "sklearn_available": ml.get("sklearn_available", False),
             },
+            "demo": {
+                "enabled": bool(demo.get("enabled", False)),
+                "phase": demo.get("phase", "disabled"),
+            },
         }
 
     def _extract_devices(self, stats: dict) -> list:
-        """Extract device information from engine stats."""
+        """Extract discovered devices from the engine baseline (real data).
+
+        Each device carries its profile and behavioral status so the dashboard
+        shows genuinely discovered devices rather than a fabricated row.
+        """
         baseline = stats.get("baseline", {})
-        return [{
-            "ip": "baseline_summary",
-            "known_devices": baseline.get("known_devices", 0),
-            "unknown_devices": baseline.get("unknown_devices", 0),
-            "learning_devices": baseline.get("learning_devices", 0),
-            "baseline_ready": baseline.get("ready", False),
-        }]
+        raw_devices = baseline.get("devices", {})
+        if not isinstance(raw_devices, dict) or not raw_devices:
+            return []
+        devices = []
+        for ip, prof in raw_devices.items():
+            if not isinstance(prof, dict):
+                continue
+            devices.append({
+                "ip": ip,
+                "status": prof.get("status", "UNKNOWN"),
+                "total_flows": prof.get("total_flows", 0),
+                "destinations_count": prof.get("destinations_count", 0),
+                "ports_count": prof.get("ports_count", 0),
+                "protocols": prof.get("protocols", []),
+                "avg_pps": prof.get("avg_pps", 0),
+                "avg_bps": prof.get("avg_bps", 0),
+                "reputation_score": prof.get("reputation_score", 0),
+                "first_seen": prof.get("first_seen", 0),
+                "last_seen": prof.get("last_seen", 0),
+            })
+        # Most recently-seen first
+        devices.sort(key=lambda d: d.get("last_seen", 0), reverse=True)
+        return devices
 
     def _extract_traffic(self, stats: dict) -> dict:
         """Extract traffic statistics."""

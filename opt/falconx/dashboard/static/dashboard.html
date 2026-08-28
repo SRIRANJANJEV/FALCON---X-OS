@@ -62,6 +62,8 @@ tr:hover{background:#0f1520}
 .ai-status{display:flex;align-items:center;gap:8px;font-size:12px}
 .ai-dot{width:6px;height:6px;border-radius:50%}
 .empty{text-align:center;padding:40px;color:var(--dim)}
+.demo-banner{background:linear-gradient(90deg,#7c3aed,#4f46e5);color:#fff;padding:8px 16px;font-size:12px;display:flex;gap:12px;align-items:center;letter-spacing:.3px}
+.demo-banner strong{margin-right:4px}
 .bar{height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-top:6px}
 .bar-fill{height:100%;border-radius:3px;transition:width 0.5s}
 </style>
@@ -79,6 +81,12 @@ tr:hover{background:#0f1520}
     <span class="status" id="overallStatus">CHECKING</span>
     <button class="btn-logout" onclick="logout()">Sign Out</button>
   </div>
+</div>
+
+<div id="demoBanner" class="demo-banner" style="display:none">
+  <strong>DEMO MODE</strong>
+  <span id="demoPhase"></span>
+  <span style="opacity:.7;margin-left:auto;font-weight:400">Synthetic events only — no traffic sent to real networks</span>
 </div>
 
 <div class="nav">
@@ -240,6 +248,11 @@ async function loadOverview(){
   const el=document.getElementById('overallStatus');
   el.textContent=data.overall_status||'UNKNOWN';
   el.className='status '+(statusMap[data.overall_status]||'');
+
+  const dm=data.demo||{};
+  const banner=document.getElementById('demoBanner');
+  if(dm.enabled){banner.style.display='flex';document.getElementById('demoPhase').textContent=' — phase: '+(dm.phase||'running')}
+  else{banner.style.display='none'}
 
   document.getElementById('overviewCards').innerHTML=`
     <div class="card"><h3>Engine Status</h3><div class="value" style="color:${e.status==='running'?'#10b981':'#ef4444'}">${e.status||'unknown'}</div><div class="sub">Uptime: ${formatUptime(e.uptime)} | Protection: ${e.protection_state||'UNKNOWN'}</div></div>

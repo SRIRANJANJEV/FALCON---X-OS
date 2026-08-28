@@ -272,6 +272,7 @@ class NetworkBaseline:
                 "known_devices": sum(1 for d in self._devices.values() if d.is_known),
                 "learning_devices": sum(1 for d in self._devices.values() if d.get_status() == "LEARNING"),
                 "unknown_devices": sum(1 for d in self._devices.values() if d.get_status() == "UNKNOWN"),
+                "devices": {ip: prof.to_dict() for ip, prof in self._devices.items()},
             }
 
     def _save(self):

@@ -21,9 +21,15 @@ from typing import Dict, List, Optional
 
 logger = logging.getLogger("falconx-engine.enforcement")
 
-COMMAND_DIR = "/run/falconx/enforcer"
-ENFORCER_STATE = "/var/lib/falconx/enforcer-state.json"
-ENFORCEMENT_LOG = "/var/log/falconx/security/enforcement.log"
+COMMAND_DIR = os.environ.get(
+    "FALCONX_COMMAND_DIR", "/run/falconx/enforcer"
+)
+ENFORCER_STATE = os.environ.get(
+    "FALCONX_ENFORCER_STATE", "/var/lib/falconx/enforcer-state.json"
+)
+ENFORCEMENT_LOG = os.environ.get(
+    "FALCONX_ENFORCEMENT_LOG", "/var/log/falconx/security/enforcement.log"
+)
 
 
 class EnforcementAction:
@@ -83,7 +89,18 @@ class EnforcementEngine:
         self._action_history: List[EnforcementAction] = []
         self._total_actions = 0
 
-        os.makedirs(COMMAND_DIR, exist_ok=True)
+        # Command directory for communicating with the privileged enforcer.
+        # May not be writable in dev/tests — enforcement simply degrades to
+        # log-only behaviour rather than crashing during construction.
+        try:
+            os.makedirs(COMMAND_DIR, exist_ok=True)
+            self.command_dir = COMMAND_DIR
+        except OSError as e:
+            logger.warning(
+                "Command directory %s not writable (%s); block commands disabled",
+                COMMAND_DIR, e,
+            )
+            self.command_dir = None
 
     def evaluate(
         self,
@@ -199,6 +216,10 @@ class EnforcementEngine:
 
     def _send_command(self, action: str, target: str, timeout: int, reason: str, actor: str) -> bool:
         """Send a command to the privileged enforcer via command file."""
+        cmd_dir = self.command_dir or COMMAND_DIR
+        if not cmd_dir:
+            logger.error("No command directory available — cannot send enforcer command")
+            return False
         try:
             command = {
                 "action": action,
@@ -210,8 +231,8 @@ class EnforcementEngine:
             }
 
             cmd_id = f"{int(time.time()*1000)}-{os.getpid()}"
-            tmp_file = Path(COMMAND_DIR) / f"{cmd_id}.tmp"
-            cmd_file = Path(COMMAND_DIR) / f"{cmd_id}.json"
+            tmp_file = Path(cmd_dir) / f"{cmd_id}.tmp"
+            cmd_file = Path(cmd_dir) / f"{cmd_id}.json"
 
             tmp_file.write_text(json.dumps(command))
             tmp_file.rename(cmd_file)

@@ -125,6 +125,30 @@ Optional AI analysis of security incidents:
 - Graceful fallback when unavailable
 - **Never** used as primary security authority
 
+## Demo Mode
+
+Runs the **real detection pipeline** on clearly-labelled synthetic events so the
+full flow (device discovery → baseline learning → rule/anomaly/ML detection →
+risk scoring → incidents → dashboard) can be demonstrated end-to-end without
+any traffic being sent to real networks. Features are injected in-process only.
+
+```yaml
+# etc/falconx/engine.yaml
+demo:
+  enabled: true   # also: FALCONX_DEMO_MODE=true
+  auto: true      # play the scenario automatically on startup
+```
+
+- The dashboard shows a visible **DEMO MODE** banner and the current phase.
+- A judge can replay/trigger the attack scene on demand by POSTing to the
+  engine's demo endpoint:
+  ```bash
+  curl -X POST http://127.0.0.1:9100/demo
+  ```
+- Normal phase produces only LOW device-discovery alerts; the attack phase
+  produces HIGH/CRITICAL incidents (port scan, SYN flood, DNS anomaly, data
+  exfiltration).
+
 ## Update System
 
 Secure update pipeline:
@@ -191,8 +215,12 @@ sudo ./scripts/security-verify.sh
 # Performance benchmark
 sudo ./tests/benchmark.sh
 
-# Engine unit tests
-cd /opt/falconx/engine && python3 -m pytest test_engine.py -v
+# Engine + dashboard tests (unit + integration)
+cd /opt/falconx/engine && python3 -m pytest test_engine.py test_enforcement.py test_state.py test_pipeline.py test_demo.py -q
+cd /opt/falconx/dashboard && python3 -m pytest test_dashboard.py -q
+
+# Full suite
+cd /opt/falconx && python3 -m pytest engine/ dashboard/ -q
 ```
 
 ## Documentation

@@ -52,7 +52,14 @@ class StreamingStats:
     def z_score(self, value: float) -> float:
         s = self.std()
         if s < 1e-10:
-            return 0.0
+            # Zero/constant variance: any meaningful deviation from the mean
+            # is anomalous. Base the score on the magnitude of the deviation
+            # relative to the mean, falling back to the raw distance when the
+            # mean is also zero (e.g. the first zero-variance datapoint).
+            if self.n < 2:
+                return 0.0
+            denom = max(abs(self.mean), 1e-6)
+            return (value - self.mean) / denom
         return (value - self.mean) / s
 
 

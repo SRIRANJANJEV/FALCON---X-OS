@@ -172,3 +172,11 @@ performance:
   max_memory_mb: 512
   gc_interval_seconds: 60
   stats_interval_seconds: 30
+
+# Demo mode — run the real detection pipeline on CLEARLY-LABELLED synthetic
+# events. Never sends traffic to real networks; injects feature data into the
+# in-process pipeline so the dashboard can be demonstrated end-to-end.
+# Equivalent env override: FALCONX_DEMO_MODE=true|false
+demo:
+  enabled: false
+  auto: true

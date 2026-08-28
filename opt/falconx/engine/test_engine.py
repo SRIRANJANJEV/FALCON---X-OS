@@ -63,7 +63,9 @@ class TestFeatureExtractor(unittest.TestCase):
         time.sleep(0.1)
         self.extractor.flow_timeout = 0.05
         time.sleep(0.1)
-        results = self.extractor.process_batch([self._make_packet(size=128)])
+        # A packet to a DIFFERENT flow must not keep the original flow alive;
+        # the original idle flow must expire and yield features.
+        results = self.extractor.process_batch([self._make_packet(size=128, dst_port=443)])
         self.assertGreater(len(results), 0)
 
     def test_features_extracted(self):

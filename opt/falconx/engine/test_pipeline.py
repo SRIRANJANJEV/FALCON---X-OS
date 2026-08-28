@@ -316,23 +316,37 @@ def test_full_pipeline():
     scan_features.extend(ext.process_batch([]))
 
     scan_enriched = base.process_features(scan_features)
+    # Aggregate detection events per source device and emit a single
+    # highest-severity incident per device. This avoids the incident spam
+    # that per-flow alerts would otherwise produce (each scan packet to a
+    # different port is a separate flow).
+    from collections import defaultdict
+    sev_rank = {"LOW": 1, "MEDIUM": 2, "HIGH": 3, "CRITICAL": 4}
+    device_primary = {}
+    device_evidence = defaultdict(list)
     for f in scan_enriched:
         events = rules.evaluate(f)
-        if events:
-            # Create incident
-            evidence = []
-            for ev in events:
-                evidence.extend(ev.evidence)
-            incident = incidents.process_detection(
-                device_ip=f.get("src_ip", ""),
-                event_type=events[0].rule_name,
-                severity="HIGH",
-                risk_score=70,
-                confidence=0.8,
-                evidence=evidence[:10],
-                description=events[0].description,
-            )
-            assert incident is not None
+        if not events:
+            continue
+        src = f.get("src_ip", "")
+        primary = max(events, key=lambda ev: sev_rank.get(ev.severity, 0))
+        existing = device_primary.get(src)
+        if existing is None or sev_rank.get(primary.severity, 0) > sev_rank.get(existing.severity, 0):
+            device_primary[src] = primary
+        for ev in events:
+            device_evidence[src].extend(ev.evidence)
+
+    for src, primary in device_primary.items():
+        incident = incidents.process_detection(
+            device_ip=src,
+            event_type=primary.rule_name,
+            severity="HIGH",
+            risk_score=70,
+            confidence=0.8,
+            evidence=device_evidence[src][:10],
+            description=primary.description,
+        )
+        assert incident is not None
 
     # Verify incident was created
     open_incidents = incidents.get_open_incidents()

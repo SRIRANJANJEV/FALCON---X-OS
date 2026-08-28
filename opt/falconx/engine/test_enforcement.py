@@ -61,8 +61,6 @@ class TestEnforcementEngine(unittest.TestCase):
 
     @patch("enforcement.COMMAND_DIR")
     def test_log_only_mode(self, mock_cmd_dir):
-        mock_cmd_dir.__class__ = str
-        mock_cmd_dir.__init__ = lambda *a: None
         # Override at instance level
         import enforcement
         enforcement.COMMAND_DIR = self.cmd_dir
@@ -184,6 +182,7 @@ class TestEnforcementEngine(unittest.TestCase):
         enforcement.COMMAND_DIR = self.cmd_dir
 
         engine = EnforcementEngine(mode="active", min_confidence=0.8)
+        engine._send_command = MagicMock(return_value=True)
 
         # Low confidence — no action
         result = engine.evaluate(90, 0.5, "10.0.0.1", [])

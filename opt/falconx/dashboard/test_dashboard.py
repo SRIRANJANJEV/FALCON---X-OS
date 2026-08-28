@@ -123,20 +123,33 @@ class TestAuthentication(unittest.TestCase):
 
     def test_password_not_in_logs(self):
         """Verify password is never logged."""
+        import io
         import logging
-        with self.assertLogs(auth.logger, level='WARNING') as cm:
+        stream = io.StringIO()
+        handler = logging.StreamHandler(stream)
+        handler.setLevel(logging.DEBUG)
+        auth.logger.addHandler(handler)
+        try:
             auth.create_user("logtest", "SecretPass123!")
-        # Check that password doesn't appear in any log message
-        for log_msg in cm.output:
-            self.assertNotIn("SecretPass123!", log_msg)
+        finally:
+            auth.logger.removeHandler(handler)
+        # Check that password doesn't appear in any captured log message
+        self.assertNotIn("SecretPass123!", stream.getvalue())
 
     def test_init_default_user_no_leak(self):
         """Verify init_default_user doesn't leak password to logs."""
+        import io
         import logging
-        with self.assertLogs(auth.logger, level='WARNING') as cm:
+        stream = io.StringIO()
+        handler = logging.StreamHandler(stream)
+        handler.setLevel(logging.DEBUG)
+        auth.logger.addHandler(handler)
+        try:
             auth.init_default_user()
-        for log_msg in cm.output:
-            self.assertNotIn("Password:", log_msg)
+        finally:
+            auth.logger.removeHandler(handler)
+        # The password is written to the initial-password file, never logged.
+        self.assertNotIn("Password:", stream.getvalue())
 
 
 class TestRateLimiting(unittest.TestCase):
